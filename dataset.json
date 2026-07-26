@@ -1,0 +1,22 @@
+[
+    {
+        "question": "What is the time complexity of binary search?",
+        "criteria": "Must state O(log n) and briefly explain why (halving the search space each step)."
+    },
+    {
+        "question": "Explain what a REST API is in 2 sentences.",
+        "criteria": "Must mention HTTP methods (GET/POST/etc) and that it lets systems communicate over a network."
+    },
+    {
+        "question": "What does 'CI/CD' stand for and why does it matter?",
+        "criteria": "Must correctly expand the acronym (Continuous Integration / Continuous Deployment) and mention automating testing or shipping code."
+    },
+    {
+        "question": "What's the difference between SQL and NoSQL databases?",
+        "criteria": "Must mention structured/relational vs. flexible/document-based, with at least one example of each."
+    },
+    {
+        "question": "What is a race condition in concurrent programming?",
+        "criteria": "Must describe two or more threads/processes touching shared data where the outcome depends on timing."
+    }
+]
