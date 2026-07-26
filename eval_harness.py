@@ -20,8 +20,10 @@ SETUP (do this before running):
      python eval_harness.py
 """
 
+import argparse
 import asyncio
 import json
+import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -32,6 +34,7 @@ client = AsyncAnthropic()
 MODEL = "claude-haiku-4-5-20251001"
 
 DATASET_PATH = Path(__file__).parent / "dataset.json"
+RESULTS_DIR = Path(__file__).parent / "results"
 
 
 def load_dataset(path: Path) -> list[dict]:
@@ -75,6 +78,23 @@ async def eval_one(item: dict) -> dict:
     return {"question": item["question"], "answer": answer, **verdict}
 
 
+def save_results(results: list[dict], passed_count: int) -> Path:
+    RESULTS_DIR.mkdir(exist_ok=True)
+    timestamp = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
+    path = RESULTS_DIR / f"{timestamp}.json"
+    payload = {
+        "timestamp": timestamp,
+        "model": MODEL,
+        "passed": passed_count,
+        "total": len(results),
+        "pass_rate": passed_count / len(results),
+        "results": results,
+    }
+    with open(path, "w") as f:
+        json.dump(payload, f, indent=2)
+    return path
+
+
 async def run_eval():
     dataset = load_dataset(DATASET_PATH)
     print(f"Running {len(dataset)} questions in parallel...\n")
@@ -97,6 +117,90 @@ async def run_eval():
         status = "PASS" if r["passed"] else "FAIL"
         print(f"[{status}] {r['question']}")
 
+    path = save_results(results, passed_count)
+    print(f"\nResults saved to {path}")
+
+
+def find_latest_two() -> tuple[Path, Path]:
+    if not RESULTS_DIR.exists():
+        print("No results yet. Run the eval first.")
+        sys.exit(1)
+    files = sorted(RESULTS_DIR.glob("*.json"))
+    if len(files) < 2:
+        print("Need at least 2 runs to compare. Run the eval again to get a second result.")
+        sys.exit(1)
+    return files[-2], files[-1]
+
+
+def compare(before_path: Path, after_path: Path):
+    with open(before_path) as f:
+        before = json.load(f)
+    with open(after_path) as f:
+        after = json.load(f)
+
+    print(f"Comparing runs:")
+    print(f"  BEFORE: {before_path.name}  (model: {before['model']}, pass rate: {before['pass_rate']:.0%})")
+    print(f"  AFTER:  {after_path.name}  (model: {after['model']}, pass rate: {after['pass_rate']:.0%})")
+
+    before_by_q = {r["question"]: r for r in before["results"]}
+    after_by_q = {r["question"]: r for r in after["results"]}
+
+    regressions, improvements, unchanged = [], [], []
+
+    for question, after_result in after_by_q.items():
+        before_result = before_by_q.get(question)
+        if before_result is None:
+            continue
+        if before_result["passed"] and not after_result["passed"]:
+            regressions.append(after_result)
+        elif not before_result["passed"] and after_result["passed"]:
+            improvements.append(after_result)
+        else:
+            unchanged.append(after_result)
+
+    delta = after["pass_rate"] - before["pass_rate"]
+    delta_str = f"+{delta:.0%}" if delta > 0 else f"{delta:.0%}"
+    print(f"\nPass rate: {before['pass_rate']:.0%} → {after['pass_rate']:.0%} ({delta_str})")
+
+    print(f"\nREGRESSIONS ({len(regressions)}):")
+    if regressions:
+        for r in regressions:
+            print(f"  [PASS→FAIL] {r['question']}")
+            print(f"    Reason: {r['reason']}")
+    else:
+        print("  none")
+
+    print(f"\nIMPROVEMENTS ({len(improvements)}):")
+    if improvements:
+        for r in improvements:
+            print(f"  [FAIL→PASS] {r['question']}")
+    else:
+        print("  none")
+
+    print(f"\nUNCHANGED ({len(unchanged)}):")
+    for r in unchanged:
+        status = "PASS" if r["passed"] else "FAIL"
+        print(f"  [{status}] {r['question']}")
+
 
 if __name__ == "__main__":
-    asyncio.run(run_eval())
+    parser = argparse.ArgumentParser(description="LLM eval harness")
+    parser.add_argument(
+        "--compare",
+        nargs="*",
+        metavar="FILE",
+        help="Compare two runs. Pass two file paths, or omit to compare the latest two.",
+    )
+    args = parser.parse_args()
+
+    if args.compare is not None:
+        if len(args.compare) == 2:
+            compare(Path(args.compare[0]), Path(args.compare[1]))
+        elif len(args.compare) == 0:
+            before, after = find_latest_two()
+            compare(before, after)
+        else:
+            print("Pass exactly 0 or 2 files to --compare.")
+            sys.exit(1)
+    else:
+        asyncio.run(run_eval())
