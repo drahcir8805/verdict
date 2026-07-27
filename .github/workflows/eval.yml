@@ -1,0 +1,120 @@
+name: Eval
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: eval-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  actions: read
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run eval
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python eval_harness.py --markdown-out summary.md
+
+      - name: Locate current result
+        id: current
+        run: |
+          path=$(ls -t results/*.json | head -n1)
+          echo "path=$path" >> "$GITHUB_OUTPUT"
+          echo "Current result: $path"
+
+      - name: Fetch baseline from main (PR only)
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p baseline
+          run_id=$(gh run list \
+            --workflow=eval.yml \
+            --branch=main \
+            --status=success \
+            --event=push \
+            --limit=1 \
+            --json databaseId \
+            --jq '.[0].databaseId // empty')
+          if [ -z "$run_id" ]; then
+            echo "No successful main run yet; first-run summary will be posted."
+            exit 0
+          fi
+          echo "Downloading baseline from run $run_id"
+          gh run download "$run_id" -n eval-baseline -D baseline \
+            || echo "No eval-baseline artifact on run $run_id"
+
+      - name: Build diff summary (PR with baseline)
+        if: github.event_name == 'pull_request'
+        run: |
+          baseline=$(ls baseline/*.json 2>/dev/null | head -n1 || true)
+          if [ -n "$baseline" ]; then
+            echo "Comparing against baseline: $baseline"
+            python eval_harness.py --compare "$baseline" "${{ steps.current.outputs.path }}" --markdown-out summary.md
+          else
+            echo "No baseline available; keeping standalone summary."
+          fi
+
+      - name: Post sticky PR comment
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('summary.md', 'utf8');
+            const marker = '<!-- rubric-eval-comment -->';
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(c => c.body && c.body.includes(marker));
+            const fullBody = `${marker}\n${body}`;
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body: fullBody,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: fullBody,
+              });
+            }
+
+      - name: Upload eval-baseline (main only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-baseline
+          path: ${{ steps.current.outputs.path }}
+          retention-days: 90
+
+      - name: Upload full results
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results-${{ github.run_id }}
+          path: results/
+          retention-days: 30

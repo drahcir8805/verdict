@@ -98,7 +98,101 @@ def save_results(results: list[dict], passed_count: int) -> Path:
     return path
 
 
-async def run_eval():
+def compute_diff(before: dict, after: dict) -> dict:
+    before_by_q = {r["question"]: r for r in before["results"]}
+    after_by_q = {r["question"]: r for r in after["results"]}
+
+    regressions, improvements, unchanged = [], [], []
+    for question, after_result in after_by_q.items():
+        before_result = before_by_q.get(question)
+        if before_result is None:
+            continue
+        if before_result["passed"] and not after_result["passed"]:
+            regressions.append(after_result)
+        elif not before_result["passed"] and after_result["passed"]:
+            improvements.append(after_result)
+        else:
+            unchanged.append(after_result)
+
+    return {
+        "before": before,
+        "after": after,
+        "regressions": regressions,
+        "improvements": improvements,
+        "unchanged": unchanged,
+        "delta": after["pass_rate"] - before["pass_rate"],
+    }
+
+
+def format_run_markdown(payload: dict) -> str:
+    lines = [
+        "## Rubric Eval Results",
+        "",
+        f"**{payload['passed']}/{payload['total']} passed ({payload['pass_rate']:.0%})** on `{payload['model']}`",
+        "",
+        "<details>",
+        "<summary>Per-question results</summary>",
+        "",
+    ]
+    for r in payload["results"]:
+        status = "PASS" if r["passed"] else "FAIL"
+        lines.append(f"- **[{status}]** {r['question']}")
+        if not r["passed"]:
+            lines.append(f"  - `{r['reason']}`")
+    lines += [
+        "",
+        "</details>",
+        "",
+        "<sub>No baseline from main yet — a regression diff will appear once main has a completed run.</sub>",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def format_diff_markdown(diff: dict, before_name: str, after_name: str) -> str:
+    before, after, delta = diff["before"], diff["after"], diff["delta"]
+    if delta > 0:
+        delta_str = f"**+{delta:.0%}**"
+    elif delta < 0:
+        delta_str = f"**{delta:.0%}**"
+    else:
+        delta_str = "no change"
+
+    lines = [
+        "## Rubric Eval Results",
+        "",
+        f"**Pass rate:** {before['pass_rate']:.0%} → {after['pass_rate']:.0%} ({delta_str})",
+        "",
+        f"Baseline `{before_name}` ({before['total']} qs) → Current `{after_name}` ({after['total']} qs) · model `{after['model']}`",
+        "",
+        f"### Regressions ({len(diff['regressions'])})",
+    ]
+    if diff["regressions"]:
+        for r in diff["regressions"]:
+            lines.append(f"- **{r['question']}**")
+            lines.append(f"  - `{r['reason']}`")
+    else:
+        lines.append("_none_")
+    lines += ["", f"### Improvements ({len(diff['improvements'])})"]
+    if diff["improvements"]:
+        for r in diff["improvements"]:
+            lines.append(f"- {r['question']}")
+    else:
+        lines.append("_none_")
+    lines += [
+        "",
+        "<details>",
+        f"<summary>Unchanged ({len(diff['unchanged'])})</summary>",
+        "",
+    ]
+    for r in diff["unchanged"]:
+        status = "PASS" if r["passed"] else "FAIL"
+        lines.append(f"- **[{status}]** {r['question']}")
+    lines += ["", "</details>", ""]
+    return "\n".join(lines)
+
+
+async def run_eval(markdown_out: Path | None = None) -> Path:
     dataset = load_dataset(DATASET_PATH)
     print(f"Running {len(dataset)} questions in parallel...\n")
 
@@ -123,6 +217,14 @@ async def run_eval():
     path = save_results(results, passed_count)
     print(f"\nResults saved to {path}")
 
+    if markdown_out is not None:
+        with open(path) as f:
+            payload = json.load(f)
+        markdown_out.write_text(format_run_markdown(payload), encoding="utf-8")
+        print(f"Markdown summary written to {markdown_out}")
+
+    return path
+
 
 def find_latest_two() -> tuple[Path, Path]:
     if not RESULTS_DIR.exists():
@@ -135,55 +237,48 @@ def find_latest_two() -> tuple[Path, Path]:
     return files[-2], files[-1]
 
 
-def compare(before_path: Path, after_path: Path):
+def compare(before_path: Path, after_path: Path, markdown_out: Path | None = None):
     with open(before_path) as f:
         before = json.load(f)
     with open(after_path) as f:
         after = json.load(f)
 
+    diff = compute_diff(before, after)
+
     print(f"Comparing runs:")
     print(f"  BEFORE: {before_path.name}  (model: {before['model']}, pass rate: {before['pass_rate']:.0%})")
     print(f"  AFTER:  {after_path.name}  (model: {after['model']}, pass rate: {after['pass_rate']:.0%})")
 
-    before_by_q = {r["question"]: r for r in before["results"]}
-    after_by_q = {r["question"]: r for r in after["results"]}
-
-    regressions, improvements, unchanged = [], [], []
-
-    for question, after_result in after_by_q.items():
-        before_result = before_by_q.get(question)
-        if before_result is None:
-            continue
-        if before_result["passed"] and not after_result["passed"]:
-            regressions.append(after_result)
-        elif not before_result["passed"] and after_result["passed"]:
-            improvements.append(after_result)
-        else:
-            unchanged.append(after_result)
-
-    delta = after["pass_rate"] - before["pass_rate"]
+    delta = diff["delta"]
     delta_str = f"+{delta:.0%}" if delta > 0 else f"{delta:.0%}"
-    print(f"\nPass rate: {before['pass_rate']:.0%} → {after['pass_rate']:.0%} ({delta_str})")
+    print(f"\nPass rate: {before['pass_rate']:.0%} -> {after['pass_rate']:.0%} ({delta_str})")
 
-    print(f"\nREGRESSIONS ({len(regressions)}):")
-    if regressions:
-        for r in regressions:
-            print(f"  [PASS→FAIL] {r['question']}")
+    print(f"\nREGRESSIONS ({len(diff['regressions'])}):")
+    if diff["regressions"]:
+        for r in diff["regressions"]:
+            print(f"  [PASS->FAIL] {r['question']}")
             print(f"    Reason: {r['reason']}")
     else:
         print("  none")
 
-    print(f"\nIMPROVEMENTS ({len(improvements)}):")
-    if improvements:
-        for r in improvements:
-            print(f"  [FAIL→PASS] {r['question']}")
+    print(f"\nIMPROVEMENTS ({len(diff['improvements'])}):")
+    if diff["improvements"]:
+        for r in diff["improvements"]:
+            print(f"  [FAIL->PASS] {r['question']}")
     else:
         print("  none")
 
-    print(f"\nUNCHANGED ({len(unchanged)}):")
-    for r in unchanged:
+    print(f"\nUNCHANGED ({len(diff['unchanged'])}):")
+    for r in diff["unchanged"]:
         status = "PASS" if r["passed"] else "FAIL"
         print(f"  [{status}] {r['question']}")
+
+    if markdown_out is not None:
+        markdown_out.write_text(
+            format_diff_markdown(diff, before_path.name, after_path.name),
+            encoding="utf-8",
+        )
+        print(f"\nMarkdown summary written to {markdown_out}")
 
 
 if __name__ == "__main__":
@@ -194,16 +289,22 @@ if __name__ == "__main__":
         metavar="FILE",
         help="Compare two runs. Pass two file paths, or omit to compare the latest two.",
     )
+    parser.add_argument(
+        "--markdown-out",
+        metavar="PATH",
+        type=Path,
+        help="Write a markdown summary (for a PR comment) to this path.",
+    )
     args = parser.parse_args()
 
     if args.compare is not None:
         if len(args.compare) == 2:
-            compare(Path(args.compare[0]), Path(args.compare[1]))
+            compare(Path(args.compare[0]), Path(args.compare[1]), args.markdown_out)
         elif len(args.compare) == 0:
             before, after = find_latest_two()
-            compare(before, after)
+            compare(before, after, args.markdown_out)
         else:
             print("Pass exactly 0 or 2 files to --compare.")
             sys.exit(1)
     else:
-        asyncio.run(run_eval())
+        asyncio.run(run_eval(args.markdown_out))

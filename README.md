@@ -13,19 +13,27 @@ Once an AI feature ships, teams keep changing it: swapping to a cheaper model, t
 3. **Judge** — a second model call grades that answer against the criteria (pass/fail + reasoning). This is "LLM-as-judge": necessary because AI answers are open-ended text, not multiple choice.
 4. **Report** — pass rate across the whole dataset, with per-question reasoning for every failure.
 
-## Status: v0
+## Status: v0.1
 
-Currently a single-threaded CLI script that runs the loop above end to end. This is the foundation the rest of the system builds on.
+CLI script + GitHub Action. Every PR gets a comment showing pass rate and any regressions against `main`.
 
 ## Setup
 
 ```bash
-pip install anthropic python-dotenv
+pip install -r requirements.txt
 cp .env.example .env      # then paste your key from console.anthropic.com
 python eval_harness.py
 ```
 
 The script reads `ANTHROPIC_API_KEY` from `.env` at startup. `.env` is gitignored — never commit it.
+
+## PR integration
+
+`.github/workflows/eval.yml` runs the eval on every PR and posts a sticky comment with the results. On pushes to `main`, the run's result JSON is stored as an artifact named `eval-baseline`; subsequent PRs download it and produce a proper diff (regressions, improvements, unchanged).
+
+**One-time setup:** add `ANTHROPIC_API_KEY` under the repo's *Settings → Secrets and variables → Actions*.
+
+The first PR after enabling CI will post a standalone summary (no baseline yet). After the next merge to `main`, subsequent PRs get the diff view.
 
 ## Example output
 
@@ -48,4 +56,4 @@ RESULTS: 4/5 passed (80%)
 
 **Now:** Python, Anthropic API
 
-**Planned:** async eval queue, Postgres + pgvector, a small dashboard, GitHub PR integration
+**Planned:** Postgres + pgvector, a small dashboard
