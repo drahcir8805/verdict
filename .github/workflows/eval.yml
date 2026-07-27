@@ -1,9 +1,9 @@
 name: Eval
 
 on:
-  pull_request:
-  push:
-    branches: [main]
+  # Temporarily manual-only while ANTHROPIC_API_KEY credits are unavailable.
+  # Restore `pull_request:` and `push: branches: [main]` once credits are topped up.
+  workflow_dispatch:
 
 concurrency:
   group: eval-${{ github.workflow }}-${{ github.ref }}
