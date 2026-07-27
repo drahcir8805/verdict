@@ -11,11 +11,10 @@ Once this works, we add the fancier pieces one at a time.
 
 SETUP (do this before running):
 1. Get a free API key at https://console.anthropic.com
-2. Set it as an environment variable in your terminal:
-     Mac/Linux:   export ANTHROPIC_API_KEY="your-key-here"
-     Windows:     setx ANTHROPIC_API_KEY "your-key-here"
-3. Install the SDK:
-     pip install anthropic
+2. Copy .env.example to .env and paste your key into it:
+     ANTHROPIC_API_KEY=sk-ant-...
+3. Install dependencies:
+     pip install anthropic python-dotenv
 4. Run it:
      python eval_harness.py
 """
@@ -26,6 +25,10 @@ import json
 import sys
 from datetime import datetime
 from pathlib import Path
+
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).parent / ".env")
 
 from anthropic import AsyncAnthropic
 

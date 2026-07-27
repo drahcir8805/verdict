@@ -20,10 +20,12 @@ Currently a single-threaded CLI script that runs the loop above end to end. This
 ## Setup
 
 ```bash
-pip install anthropic
-export ANTHROPIC_API_KEY="your-key-here"   # get one at console.anthropic.com
+pip install anthropic python-dotenv
+cp .env.example .env      # then paste your key from console.anthropic.com
 python eval_harness.py
 ```
+
+The script reads `ANTHROPIC_API_KEY` from `.env` at startup. `.env` is gitignored — never commit it.
 
 ## Example output
 

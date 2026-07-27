@@ -5,8 +5,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Setup
 
 ```bash
-pip install anthropic
-# Set ANTHROPIC_API_KEY in environment before running
+pip install anthropic python-dotenv
+# Copy .env.example to .env and paste your ANTHROPIC_API_KEY into it
 python eval_harness.py
 ```
 
