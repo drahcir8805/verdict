@@ -27,18 +27,22 @@ python eval_harness.py
 
 The script reads `ANTHROPIC_API_KEY` from `.env` at startup. `.env` is gitignored — never commit it.
 
-## PR integration
+## Commands
 
-`.github/workflows/eval.yml` runs the eval on every PR and posts a sticky comment with the results. On pushes to `main`, the run's result JSON is stored as an artifact named `eval-baseline`; subsequent PRs download it and produce a proper diff (regressions, improvements, unchanged).
+```bash
+python eval_harness.py                                # run eval, save results/<timestamp>.json
+python eval_harness.py --markdown-out summary.md      # also write a PR-comment-ready summary
+python eval_harness.py --compare A.json B.json        # diff two runs (regressions / improvements)
+python eval_harness.py --compare                      # diff the latest two runs in results/
+python eval_harness.py --compare A B --markdown-out summary.md   # diff -> markdown
+```
 
-**One-time setup:** add `ANTHROPIC_API_KEY` under the repo's *Settings → Secrets and variables → Actions*.
-
-The first PR after enabling CI will post a standalone summary (no baseline yet). After the next merge to `main`, subsequent PRs get the diff view.
+Each run appends a timestamped JSON under `results/` with the model, pass rate, and per-question verdicts.
 
 ## Example output
 
 ```
-[1/5] Asking: What is the time complexity of binary search?
+[1/5] What is the time complexity of binary search?
   -> Answer: The time complexity of binary search is O(log n)...
   -> Judge says: PASS (Correctly states O(log n) with explanation)
 
@@ -52,8 +56,42 @@ RESULTS: 4/5 passed (80%)
 [PASS] What is a race condition in concurrent programming?
 ```
 
+## PR integration
+
+`.github/workflows/eval.yml` runs the eval on every PR and posts a sticky comment with the results. On pushes to `main`, the run's result JSON is stored as an artifact named `eval-baseline`; subsequent PRs download it and produce a proper diff (regressions, improvements, unchanged).
+
+**One-time setup:** add `ANTHROPIC_API_KEY` under the repo's *Settings → Secrets and variables → Actions*.
+
+The first PR after enabling CI will post a standalone summary (no baseline yet). After the next merge to `main`, subsequent PRs get the diff view.
+
+### Sample PR comment
+
+> **Pass rate:** 80% → 60% (**−20%**)
+>
+> **Regressions (1)**
+> - **What does 'CI/CD' stand for?** — `FAIL - omitted the acronym expansion`
+>
+> **Improvements (0)** — _none_
+>
+> <details><summary>Unchanged (3)</summary>[PASS] Big-O of binary search? · [PASS] Explain REST · [PASS] SQL vs NoSQL</details>
+
+## Repo layout
+
+```
+eval_harness.py          # ask, judge, compare, markdown output — all logic
+dataset.json             # the golden questions + criteria (edit this to add cases)
+requirements.txt         # anthropic, python-dotenv
+.env.example             # template — copy to .env locally
+.github/workflows/eval.yml   # runs on PR + push to main
+results/                 # timestamped run outputs (gitignored)
+```
+
 ## Tech stack
 
-**Now:** Python, Anthropic API
+**Now:** Python, Anthropic API, GitHub Actions.
 
-**Planned:** Postgres + pgvector, a small dashboard
+**Next up (in order of leverage):**
+1. **Cross-model judge** — let a stronger model grade a cheaper model's answers so the judge isn't marking its own homework.
+2. **Judge meta-eval** — a small human-labeled slice so we can measure how often the judge is right, not just how often the model passes.
+3. **Grow the dataset** — 20-50 questions, tagged by category, so a regression report can pinpoint *what kind* of quality dropped.
+4. **Persistence + dashboard** — Postgres and a UI, once run history is big enough that JSON files start hurting.
