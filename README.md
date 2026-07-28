@@ -35,6 +35,7 @@ python eval_harness.py --markdown-out summary.md      # also write a PR-comment-
 python eval_harness.py --compare A.json B.json        # diff two runs (regressions / improvements)
 python eval_harness.py --compare                      # diff the latest two runs in results/
 python eval_harness.py --compare A B --markdown-out summary.md   # diff -> markdown
+streamlit run dashboard.py                            # local dashboard over results/*.json
 ```
 
 Each run appends a timestamped JSON under `results/` with the model, pass rate, and per-question verdicts.
@@ -75,12 +76,30 @@ The first PR after enabling CI will post a standalone summary (no baseline yet).
 >
 > <details><summary>Unchanged (3)</summary>[PASS] Big-O of binary search? · [PASS] Explain REST · [PASS] SQL vs NoSQL</details>
 
+## Dashboard
+
+A local Streamlit app that reads `results/*.json` — no database, no server, no deploy.
+
+```bash
+streamlit run dashboard.py    # opens http://localhost:8501
+```
+
+Four views in the sidebar:
+
+- **Pass rate over time** — line chart across all runs, plus a summary table.
+- **Per-question history** — pick a question, see how it's fared run-by-run (useful for spotting flakes).
+- **Latest run detail** — the most recent run's per-question verdicts and full answers.
+- **Run-vs-run diff** — pick any two runs, get the same regressions/improvements/unchanged split as `--compare`.
+
+Click **Reload results** in the sidebar after a new eval run to refresh the cache.
+
 ## Repo layout
 
 ```
 eval_harness.py          # ask, judge, compare, markdown output — all logic
+dashboard.py             # local Streamlit dashboard over results/*.json
 dataset.json             # the golden questions + criteria (edit this to add cases)
-requirements.txt         # anthropic, python-dotenv
+requirements.txt         # anthropic, python-dotenv, streamlit
 .env.example             # template — copy to .env locally
 .github/workflows/eval.yml   # runs on PR + push to main
 results/                 # timestamped run outputs (gitignored)

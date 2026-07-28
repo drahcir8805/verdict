@@ -18,6 +18,7 @@ python eval_harness.py --markdown-out summary.md   # also write PR-comment markd
 python eval_harness.py --compare A B               # diff two runs (stdout)
 python eval_harness.py --compare A B --markdown-out summary.md  # diff → markdown
 python eval_harness.py --compare                   # diff latest two runs in results/
+streamlit run dashboard.py                         # local dashboard over results/*.json
 ```
 
 No test suite yet. Manual verification is done by running the script end-to-end and checking the printed report.
@@ -26,6 +27,7 @@ No test suite yet. Manual verification is done by running the script end-to-end 
 
 - **`eval_harness.py`** — loads the dataset, runs answer+judge in parallel, saves JSON to `results/`, prints a pass/fail report. Also handles compare-mode and markdown output.
 - **`dataset.json`** — the golden dataset: a list of `{ "question", "criteria" }` objects. This is the only file that changes when adding or modifying eval cases.
+- **`dashboard.py`** — Streamlit app that reads `results/*.json` and renders four views (pass rate over time, per-question history, latest run detail, run-vs-run diff). Reuses `compute_diff()` from `eval_harness.py` for the diff view.
 - **`.github/workflows/eval.yml`** — runs the eval on PRs and pushes to main. On PR, downloads the most recent `eval-baseline` artifact from main and posts a sticky diff comment. On push to main, uploads the fresh run as the new `eval-baseline`.
 
 ### Core loop (in `run_eval`)
