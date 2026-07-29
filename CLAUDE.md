@@ -39,7 +39,7 @@ No test suite yet. Manual verification is done by running the script end-to-end 
 
 ### LLM-as-judge pattern
 
-`judge_answer()` sends the original question, the model's answer, and the criteria to the same model and asks it to respond with `PASS` or `FAIL - <reason>`. The verdict is parsed by checking if the response starts with `PASS`.
+`judge_answer()` sends the original question, the model's answer, and the criteria to a **different** model (see `JUDGE_MODEL`) and asks it to respond with `PASS` or `FAIL - <reason>`. The verdict is parsed by checking if the response starts with `PASS`. `ANSWER_MODEL` and `JUDGE_MODEL` are separate constants at the top of `eval_harness.py`; both are recorded in every saved run under `model` and `judge_model` respectively.
 
 ### Diff pattern
 

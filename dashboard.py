@@ -35,6 +35,14 @@ def _passed_mark(passed: bool) -> str:
     return "PASS" if passed else "FAIL"
 
 
+def _model_label(run: dict) -> str:
+    answer = run.get("model", "?")
+    judge = run.get("judge_model")
+    if judge and judge != answer:
+        return f"{answer} → {judge}"
+    return answer
+
+
 def view_pass_rate_over_time(runs: list[dict]) -> None:
     st.header("Pass rate over time")
 
@@ -59,7 +67,8 @@ def view_pass_rate_over_time(runs: list[dict]) -> None:
     table_rows = [
         {
             "timestamp": r["timestamp"],
-            "model": r["model"],
+            "answer model": r.get("model", "?"),
+            "judge model": r.get("judge_model", "—"),
             "passed": f"{r['passed']}/{r['total']}",
             "pass_rate": f"{r['pass_rate']:.0%}",
         }
@@ -87,7 +96,7 @@ def view_per_question_history(runs: list[dict]) -> None:
         rows.append(
             {
                 "timestamp": run["timestamp"],
-                "model": run["model"],
+                "models": _model_label(run),
                 "verdict": _passed_mark(match["passed"]),
                 "reason": match["reason"],
                 "answer": match["answer"],
@@ -110,7 +119,7 @@ def view_latest_run_detail(runs: list[dict]) -> None:
 
     latest = runs[-1]
     st.write(
-        f"**Model:** `{latest['model']}` · "
+        f"**Models:** `{_model_label(latest)}` · "
         f"**Timestamp:** `{latest['timestamp']}` · "
         f"**Pass rate:** {latest['passed']}/{latest['total']} ({latest['pass_rate']:.0%})"
     )

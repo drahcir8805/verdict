@@ -10,7 +10,7 @@ Once an AI feature ships, teams keep changing it: swapping to a cheaper model, t
 
 1. **A golden dataset** — a fixed set of questions with known-good criteria, the "quiz" every version has to pass.
 2. **Ask** — the model answers each question like a normal user would.
-3. **Judge** — a second model call grades that answer against the criteria (pass/fail + reasoning). This is "LLM-as-judge": necessary because AI answers are open-ended text, not multiple choice.
+3. **Judge** — a second, *different* model call grades that answer against the criteria (pass/fail + reasoning). This is "LLM-as-judge": necessary because AI answers are open-ended text, not multiple choice. We use Haiku for answers and Sonnet as the judge so the model isn't marking its own homework.
 4. **Report** — pass rate across the whole dataset, with per-question reasoning for every failure.
 
 ## Status: v0.1
@@ -110,7 +110,6 @@ results/                 # timestamped run outputs (gitignored)
 **Now:** Python, Anthropic API, GitHub Actions.
 
 **Next up (in order of leverage):**
-1. **Cross-model judge** — let a stronger model grade a cheaper model's answers so the judge isn't marking its own homework.
+1. **Dataset tags + per-category rollup** — tag each question by category so a regression report can pinpoint *what kind* of quality dropped, not just the overall pass rate.
 2. **Judge meta-eval** — a small human-labeled slice so we can measure how often the judge is right, not just how often the model passes.
-3. **Grow the dataset** — 20-50 questions, tagged by category, so a regression report can pinpoint *what kind* of quality dropped.
-4. **Persistence + dashboard** — Postgres and a UI, once run history is big enough that JSON files start hurting.
+3. **Persistence** — Postgres (or SQLite) once run history is big enough that JSON files start hurting the dashboard.

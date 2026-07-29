@@ -34,7 +34,8 @@ from anthropic import AsyncAnthropic
 
 client = AsyncAnthropic()
 
-MODEL = "claude-haiku-4-5-20251001"
+ANSWER_MODEL = "claude-haiku-4-5-20251001"
+JUDGE_MODEL = "claude-sonnet-4-6"
 
 DATASET_PATH = Path(__file__).parent / "dataset.json"
 RESULTS_DIR = Path(__file__).parent / "results"
@@ -47,7 +48,7 @@ def load_dataset(path: Path) -> list[dict]:
 
 async def get_answer(question: str) -> str:
     response = await client.messages.create(
-        model=MODEL,
+        model=ANSWER_MODEL,
         max_tokens=300,
         messages=[{"role": "user", "content": question}],
     )
@@ -65,7 +66,7 @@ Does this answer meet the criteria? Respond with EXACTLY one line in this format
 PASS or FAIL - <one sentence reason>"""
 
     response = await client.messages.create(
-        model=MODEL,
+        model=JUDGE_MODEL,
         max_tokens=100,
         messages=[{"role": "user", "content": judge_prompt}],
     )
@@ -87,7 +88,8 @@ def save_results(results: list[dict], passed_count: int) -> Path:
     path = RESULTS_DIR / f"{timestamp}.json"
     payload = {
         "timestamp": timestamp,
-        "model": MODEL,
+        "model": ANSWER_MODEL,
+        "judge_model": JUDGE_MODEL,
         "passed": passed_count,
         "total": len(results),
         "pass_rate": passed_count / len(results),
@@ -124,11 +126,19 @@ def compute_diff(before: dict, after: dict) -> dict:
     }
 
 
+def _model_line(payload: dict) -> str:
+    answer = payload.get("model", "?")
+    judge = payload.get("judge_model")
+    if judge and judge != answer:
+        return f"`{answer}` answered · `{judge}` judged"
+    return f"`{answer}`"
+
+
 def format_run_markdown(payload: dict) -> str:
     lines = [
         "## Rubric Eval Results",
         "",
-        f"**{payload['passed']}/{payload['total']} passed ({payload['pass_rate']:.0%})** on `{payload['model']}`",
+        f"**{payload['passed']}/{payload['total']} passed ({payload['pass_rate']:.0%})** — {_model_line(payload)}",
         "",
         "<details>",
         "<summary>Per-question results</summary>",
@@ -163,7 +173,7 @@ def format_diff_markdown(diff: dict, before_name: str, after_name: str) -> str:
         "",
         f"**Pass rate:** {before['pass_rate']:.0%} → {after['pass_rate']:.0%} ({delta_str})",
         "",
-        f"Baseline `{before_name}` ({before['total']} qs) → Current `{after_name}` ({after['total']} qs) · model `{after['model']}`",
+        f"Baseline `{before_name}` ({before['total']} qs) → Current `{after_name}` ({after['total']} qs) · {_model_line(after)}",
         "",
         f"### Regressions ({len(diff['regressions'])})",
     ]
@@ -194,7 +204,10 @@ def format_diff_markdown(diff: dict, before_name: str, after_name: str) -> str:
 
 async def run_eval(markdown_out: Path | None = None) -> Path:
     dataset = load_dataset(DATASET_PATH)
-    print(f"Running {len(dataset)} questions in parallel...\n")
+    print(
+        f"Running {len(dataset)} questions in parallel — "
+        f"answers by {ANSWER_MODEL}, judged by {JUDGE_MODEL}\n"
+    )
 
     results = await asyncio.gather(*[eval_one(item) for item in dataset])
 
@@ -245,9 +258,17 @@ def compare(before_path: Path, after_path: Path, markdown_out: Path | None = Non
 
     diff = compute_diff(before, after)
 
+    def _describe(run: dict) -> str:
+        parts = [f"answer={run.get('model', '?')}"]
+        judge = run.get("judge_model")
+        if judge and judge != run.get("model"):
+            parts.append(f"judge={judge}")
+        parts.append(f"pass rate: {run['pass_rate']:.0%}")
+        return ", ".join(parts)
+
     print(f"Comparing runs:")
-    print(f"  BEFORE: {before_path.name}  (model: {before['model']}, pass rate: {before['pass_rate']:.0%})")
-    print(f"  AFTER:  {after_path.name}  (model: {after['model']}, pass rate: {after['pass_rate']:.0%})")
+    print(f"  BEFORE: {before_path.name}  ({_describe(before)})")
+    print(f"  AFTER:  {after_path.name}  ({_describe(after)})")
 
     delta = diff["delta"]
     delta_str = f"+{delta:.0%}" if delta > 0 else f"{delta:.0%}"

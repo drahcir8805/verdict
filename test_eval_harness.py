@@ -14,7 +14,11 @@ from pathlib import Path
 import eval_harness as eh
 
 
-def _make_run(pass_map: dict[str, bool], model: str = "test-model") -> dict:
+def _make_run(
+    pass_map: dict[str, bool],
+    model: str = "test-answer-model",
+    judge_model: str | None = "test-judge-model",
+) -> dict:
     """Build a saved-run payload from {question: passed}."""
     results = [
         {
@@ -27,7 +31,7 @@ def _make_run(pass_map: dict[str, bool], model: str = "test-model") -> dict:
     ]
     passed_count = sum(pass_map.values())
     total = len(pass_map)
-    return {
+    payload = {
         "timestamp": "2026-01-01T00-00-00",
         "model": model,
         "passed": passed_count,
@@ -35,6 +39,9 @@ def _make_run(pass_map: dict[str, bool], model: str = "test-model") -> dict:
         "pass_rate": passed_count / total if total else 0.0,
         "results": results,
     }
+    if judge_model is not None:
+        payload["judge_model"] = judge_model
+    return payload
 
 
 class LoadDatasetTests(unittest.TestCase):
@@ -87,14 +94,28 @@ class ComputeDiffTests(unittest.TestCase):
 
 class MarkdownFormatterTests(unittest.TestCase):
     def test_run_markdown_contains_headline_stats(self):
-        payload = _make_run({"a": True, "b": False}, model="claude-test")
+        payload = _make_run(
+            {"a": True, "b": False}, model="claude-test", judge_model="claude-judge"
+        )
         md = eh.format_run_markdown(payload)
         self.assertIn("Rubric Eval Results", md)
         self.assertIn("1/2 passed", md)
         self.assertIn("50%", md)
         self.assertIn("claude-test", md)
+        self.assertIn("claude-judge", md)
         self.assertIn("[FAIL]", md)
         self.assertIn("[PASS]", md)
+
+    def test_run_markdown_omits_judge_when_same_as_answer(self):
+        payload = _make_run({"a": True}, model="same", judge_model="same")
+        md = eh.format_run_markdown(payload)
+        self.assertIn("`same`", md)
+        self.assertNotIn("judged", md)
+
+    def test_run_markdown_handles_legacy_payload_without_judge(self):
+        payload = _make_run({"a": True}, model="legacy", judge_model=None)
+        md = eh.format_run_markdown(payload)
+        self.assertIn("legacy", md)
 
     def test_diff_markdown_shows_positive_delta(self):
         before = _make_run({"a": False})
@@ -128,7 +149,13 @@ class SaveResultsTests(unittest.TestCase):
                 self.assertEqual(payload["passed"], 1)
                 self.assertEqual(payload["total"], 1)
                 self.assertEqual(payload["pass_rate"], 1.0)
-                self.assertEqual(payload["model"], eh.MODEL)
+                self.assertEqual(payload["model"], eh.ANSWER_MODEL)
+                self.assertEqual(payload["judge_model"], eh.JUDGE_MODEL)
+                self.assertNotEqual(
+                    eh.ANSWER_MODEL,
+                    eh.JUDGE_MODEL,
+                    "cross-model judge should differ from answer model",
+                )
                 self.assertEqual(payload["results"], results)
             finally:
                 eh.RESULTS_DIR = original_dir
