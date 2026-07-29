@@ -26,16 +26,16 @@ No test suite yet. Manual verification is done by running the script end-to-end 
 ## Architecture
 
 - **`eval_harness.py`** — loads the dataset, runs answer+judge in parallel, saves JSON to `results/`, prints a pass/fail report. Also handles compare-mode and markdown output.
-- **`dataset.json`** — the golden dataset: a list of `{ "question", "criteria" }` objects. This is the only file that changes when adding or modifying eval cases.
-- **`dashboard.py`** — Streamlit app that reads `results/*.json` and renders four views (pass rate over time, per-question history, latest run detail, run-vs-run diff). Reuses `compute_diff()` from `eval_harness.py` for the diff view.
+- **`dataset.json`** — the golden dataset: a list of `{ "question", "criteria", "tags"? }` objects. `tags` is optional (a list of category strings) and drives the per-category rollup in reports + dashboard. This is the only file that changes when adding or modifying eval cases.
+- **`dashboard.py`** — Streamlit app that reads `results/*.json` and renders five views (pass rate over time, category trends, per-question history, latest run detail, run-vs-run diff). Reuses `compute_diff()` and `compute_category_stats()` from `eval_harness.py`.
 - **`.github/workflows/eval.yml`** — runs the eval on PRs and pushes to main. On PR, downloads the most recent `eval-baseline` artifact from main and posts a sticky diff comment. On push to main, uploads the fresh run as the new `eval-baseline`.
 
 ### Core loop (in `run_eval`)
 
 1. Load `dataset.json` via `load_dataset()`
-2. `asyncio.gather` over `eval_one(item)`: `get_answer()` → `judge_answer()`
+2. `asyncio.gather` over `eval_one(item)`: `get_answer()` → `judge_answer()` (tags from the dataset item are propagated into the per-question result)
 3. `save_results()` to `results/<timestamp>.json`
-4. Optional `format_run_markdown()` for PR comments
+4. Optional `format_run_markdown()` for PR comments — includes a per-tag rollup via `compute_category_stats()` when the dataset is tagged
 
 ### LLM-as-judge pattern
 

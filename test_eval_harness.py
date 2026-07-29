@@ -18,11 +18,14 @@ def _make_run(
     pass_map: dict[str, bool],
     model: str = "test-answer-model",
     judge_model: str | None = "test-judge-model",
+    tags_map: dict[str, list[str]] | None = None,
 ) -> dict:
     """Build a saved-run payload from {question: passed}."""
+    tags_map = tags_map or {}
     results = [
         {
             "question": q,
+            "tags": tags_map.get(q, []),
             "answer": f"answer to {q}",
             "passed": passed,
             "reason": "PASS" if passed else "FAIL - wrong",
@@ -64,6 +67,11 @@ class LoadDatasetTests(unittest.TestCase):
             self.assertIn("criteria", item)
             self.assertIsInstance(item["question"], str)
             self.assertIsInstance(item["criteria"], str)
+            if "tags" in item:
+                self.assertIsInstance(item["tags"], list)
+                for tag in item["tags"]:
+                    self.assertIsInstance(tag, str)
+                    self.assertTrue(tag, "tags must be non-empty strings")
 
 
 class ComputeDiffTests(unittest.TestCase):
@@ -92,6 +100,31 @@ class ComputeDiffTests(unittest.TestCase):
         self.assertNotIn("new", all_qs)
 
 
+class CategoryStatsTests(unittest.TestCase):
+    def test_groups_by_tag(self):
+        run = _make_run(
+            {"a": True, "b": False, "c": True, "d": True},
+            tags_map={"a": ["code"], "b": ["code"], "c": ["hedging"], "d": ["hedging"]},
+        )
+        stats = eh.compute_category_stats(run["results"])
+        self.assertEqual(stats["code"], {"passed": 1, "total": 2, "pass_rate": 0.5})
+        self.assertEqual(stats["hedging"], {"passed": 2, "total": 2, "pass_rate": 1.0})
+
+    def test_untagged_questions_bucketed_separately(self):
+        run = _make_run({"a": True, "b": False}, tags_map={"a": ["code"]})
+        stats = eh.compute_category_stats(run["results"])
+        self.assertIn("code", stats)
+        self.assertIn("(untagged)", stats)
+        self.assertEqual(stats["(untagged)"]["total"], 1)
+
+    def test_multi_tag_question_counted_once_per_tag(self):
+        run = _make_run({"a": False}, tags_map={"a": ["code", "hedging"]})
+        stats = eh.compute_category_stats(run["results"])
+        self.assertEqual(stats["code"]["total"], 1)
+        self.assertEqual(stats["hedging"]["total"], 1)
+        self.assertEqual(stats["code"]["passed"], 0)
+
+
 class MarkdownFormatterTests(unittest.TestCase):
     def test_run_markdown_contains_headline_stats(self):
         payload = _make_run(
@@ -116,6 +149,30 @@ class MarkdownFormatterTests(unittest.TestCase):
         payload = _make_run({"a": True}, model="legacy", judge_model=None)
         md = eh.format_run_markdown(payload)
         self.assertIn("legacy", md)
+
+    def test_run_markdown_includes_category_table_when_tags_present(self):
+        payload = _make_run(
+            {"a": True, "b": False},
+            tags_map={"a": ["code"], "b": ["hedging"]},
+        )
+        md = eh.format_run_markdown(payload)
+        self.assertIn("By category", md)
+        self.assertIn("`code`", md)
+        self.assertIn("`hedging`", md)
+
+    def test_diff_markdown_includes_category_delta_when_tags_present(self):
+        before = _make_run(
+            {"a": True, "b": False},
+            tags_map={"a": ["code"], "b": ["code"]},
+        )
+        after = _make_run(
+            {"a": True, "b": True},
+            tags_map={"a": ["code"], "b": ["code"]},
+        )
+        md = eh.format_diff_markdown(eh.compute_diff(before, after), "b.json", "a.json")
+        self.assertIn("By category", md)
+        self.assertIn("`code`", md)
+        self.assertIn("+50%", md)
 
     def test_diff_markdown_shows_positive_delta(self):
         before = _make_run({"a": False})

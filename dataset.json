@@ -1,82 +1,102 @@
 [
     {
         "question": "What is the time complexity of binary search?",
-        "criteria": "Must state O(log n) and briefly explain why (halving the search space each step)."
+        "criteria": "Must state O(log n) and briefly explain why (halving the search space each step).",
+        "tags": ["algorithms"]
     },
     {
         "question": "Explain what a REST API is in 2 sentences.",
-        "criteria": "Must mention HTTP methods (GET/POST/etc) and that it lets systems communicate over a network."
+        "criteria": "Must mention HTTP methods (GET/POST/etc) and that it lets systems communicate over a network.",
+        "tags": ["concepts"]
     },
     {
         "question": "What does 'CI/CD' stand for and why does it matter?",
-        "criteria": "Must correctly expand the acronym (Continuous Integration / Continuous Deployment) and mention automating testing or shipping code."
+        "criteria": "Must correctly expand the acronym (Continuous Integration / Continuous Deployment) and mention automating testing or shipping code.",
+        "tags": ["concepts"]
     },
     {
         "question": "What's the difference between SQL and NoSQL databases?",
-        "criteria": "Must mention structured/relational vs. flexible/document-based, with at least one example of each."
+        "criteria": "Must mention structured/relational vs. flexible/document-based, with at least one example of each.",
+        "tags": ["concepts"]
     },
     {
         "question": "What is a race condition in concurrent programming?",
-        "criteria": "Must describe two or more threads/processes touching shared data where the outcome depends on timing."
+        "criteria": "Must describe two or more threads/processes touching shared data where the outcome depends on timing.",
+        "tags": ["concepts"]
     },
     {
         "question": "In what year was the first version of Python released?",
-        "criteria": "Must state 1991."
+        "criteria": "Must state 1991.",
+        "tags": ["trivia"]
     },
     {
         "question": "Who created the Linux kernel?",
-        "criteria": "Must name Linus Torvalds."
+        "criteria": "Must name Linus Torvalds.",
+        "tags": ["trivia"]
     },
     {
         "question": "What does HTTP status code 418 mean?",
-        "criteria": "Must identify it as 'I'm a teapot' (from RFC 2324, an April Fools' joke). Bonus for noting it's not a real production code."
+        "criteria": "Must identify it as 'I'm a teapot' (from RFC 2324, an April Fools' joke). Bonus for noting it's not a real production code.",
+        "tags": ["trivia"]
     },
     {
         "question": "A train leaves Station A at 60 mph. Another leaves Station B (180 miles away) at 40 mph heading toward A. How long until they meet?",
-        "criteria": "Must arrive at 1.8 hours (or equivalent: 1 hour 48 minutes). Answer must show the combined-speed reasoning (60+40=100 mph, 180/100=1.8h)."
+        "criteria": "Must arrive at 1.8 hours (or equivalent: 1 hour 48 minutes). Answer must show the combined-speed reasoning (60+40=100 mph, 180/100=1.8h).",
+        "tags": ["reasoning"]
     },
     {
         "question": "If a hash table has 1000 buckets and 10000 items evenly distributed, what is the average lookup time in big-O terms?",
-        "criteria": "Must state O(1) average (or amortized O(1)) despite the load factor, and NOT confuse this with worst case O(n). Bonus for noting the load factor of 10 means ~10 items per bucket."
+        "criteria": "Must state O(1) average (or amortized O(1)) despite the load factor, and NOT confuse this with worst case O(n). Bonus for noting the load factor of 10 means ~10 items per bucket.",
+        "tags": ["algorithms"]
     },
     {
         "question": "You have 8 balls that all look identical. 7 weigh the same, 1 is slightly heavier. Using a balance scale, what is the minimum number of weighings needed to guarantee finding the heavy ball?",
-        "criteria": "Must state 2 weighings and explain the split-into-3-groups strategy (weigh 3v3, then narrow to the remaining group of 2 or 3)."
+        "criteria": "Must state 2 weighings and explain the split-into-3-groups strategy (weigh 3v3, then narrow to the remaining group of 2 or 3).",
+        "tags": ["reasoning"]
     },
     {
         "question": "What does this Python code print?\n\n```python\nx = [1, 2, 3]\ny = x\ny.append(4)\nprint(x)\n```",
-        "criteria": "Must state the output is [1, 2, 3, 4] and explain that y and x reference the same list object (not a copy)."
+        "criteria": "Must state the output is [1, 2, 3, 4] and explain that y and x reference the same list object (not a copy).",
+        "tags": ["code"]
     },
     {
         "question": "There's a bug in this function. What is it?\n\n```python\ndef average(numbers):\n    return sum(numbers) / len(numbers)\n```",
-        "criteria": "Must identify that it raises ZeroDivisionError when passed an empty list. Should NOT invent unrelated bugs."
+        "criteria": "Must identify that it raises ZeroDivisionError when passed an empty list. Should NOT invent unrelated bugs.",
+        "tags": ["code"]
     },
     {
         "question": "What does the following JavaScript expression evaluate to, and why?\n\n```javascript\n[] + []\n```",
-        "criteria": "Must state the result is an empty string ''. Must explain that + on arrays coerces them to strings via toString(), and an empty array's string form is ''."
+        "criteria": "Must state the result is an empty string ''. Must explain that + on arrays coerces them to strings via toString(), and an empty array's string form is ''.",
+        "tags": ["code"]
     },
     {
         "question": "Is Python compiled or interpreted?",
-        "criteria": "Must NOT give an unqualified 'interpreted'. Must note that Python source is first compiled to bytecode (.pyc), which is then executed by the Python virtual machine."
+        "criteria": "Must NOT give an unqualified 'interpreted'. Must note that Python source is first compiled to bytecode (.pyc), which is then executed by the Python virtual machine.",
+        "tags": ["hedging"]
     },
     {
         "question": "Does JavaScript pass arguments by value or by reference?",
-        "criteria": "Must clarify that JavaScript is always pass-by-value, but for objects the value being passed IS a reference (sometimes called 'pass by sharing' or 'call by value of the reference'). Must NOT say simply 'pass by reference'."
+        "criteria": "Must clarify that JavaScript is always pass-by-value, but for objects the value being passed IS a reference (sometimes called 'pass by sharing' or 'call by value of the reference'). Must NOT say simply 'pass by reference'.",
+        "tags": ["hedging"]
     },
     {
         "question": "Is HTTPS just HTTP with encryption?",
-        "criteria": "Must note that HTTPS = HTTP over TLS, which provides not only encryption but also authentication (via certificates) and integrity. An answer that only says 'encryption' is incomplete."
+        "criteria": "Must note that HTTPS = HTTP over TLS, which provides not only encryption but also authentication (via certificates) and integrity. An answer that only says 'encryption' is incomplete.",
+        "tags": ["hedging"]
     },
     {
         "question": "Should I use microservices for my new project?",
-        "criteria": "Must NOT give an unqualified yes or no. Must mention at least one of: team size, operational overhead, deployment complexity, or scale requirements. Should note monoliths are often the right starting point."
+        "criteria": "Must NOT give an unqualified yes or no. Must mention at least one of: team size, operational overhead, deployment complexity, or scale requirements. Should note monoliths are often the right starting point.",
+        "tags": ["hedging"]
     },
     {
         "question": "Which programming language is fastest?",
-        "criteria": "Must NOT name a single language as universally fastest. Must qualify with 'depends on the workload / benchmark / what fast means' and ideally mention that language and implementation are different things (e.g. CPython vs PyPy)."
+        "criteria": "Must NOT name a single language as universally fastest. Must qualify with 'depends on the workload / benchmark / what fast means' and ideally mention that language and implementation are different things (e.g. CPython vs PyPy).",
+        "tags": ["hedging"]
     },
     {
         "question": "Is it better to normalize or denormalize a database?",
-        "criteria": "Must NOT pick one universally. Must explain the tradeoff: normalization reduces redundancy and update anomalies but requires joins; denormalization speeds up reads at the cost of write complexity and consistency. Answer should be workload-dependent."
+        "criteria": "Must NOT pick one universally. Must explain the tradeoff: normalization reduces redundancy and update anomalies but requires joins; denormalization speeds up reads at the cost of write complexity and consistency. Answer should be workload-dependent.",
+        "tags": ["hedging"]
     }
 ]

@@ -79,7 +79,12 @@ async def eval_one(item: dict) -> dict:
     """Runs a single question end-to-end: ask then judge."""
     answer = await get_answer(item["question"])
     verdict = await judge_answer(item["question"], answer, item["criteria"])
-    return {"question": item["question"], "answer": answer, **verdict}
+    return {
+        "question": item["question"],
+        "tags": item.get("tags", []),
+        "answer": answer,
+        **verdict,
+    }
 
 
 def save_results(results: list[dict], passed_count: int) -> Path:
@@ -98,6 +103,25 @@ def save_results(results: list[dict], passed_count: int) -> Path:
     with open(path, "w") as f:
         json.dump(payload, f, indent=2)
     return path
+
+
+def compute_category_stats(results: list[dict]) -> dict[str, dict]:
+    """Group per-question results by tag, returning per-tag pass counts.
+
+    Untagged questions are grouped under `"(untagged)"`. A question with
+    multiple tags is counted once per tag.
+    """
+    stats: dict[str, dict] = {}
+    for r in results:
+        tags = r.get("tags") or ["(untagged)"]
+        for tag in tags:
+            entry = stats.setdefault(tag, {"passed": 0, "total": 0})
+            entry["total"] += 1
+            if r["passed"]:
+                entry["passed"] += 1
+    for entry in stats.values():
+        entry["pass_rate"] = entry["passed"] / entry["total"] if entry["total"] else 0.0
+    return dict(sorted(stats.items()))
 
 
 def compute_diff(before: dict, after: dict) -> dict:
@@ -134,11 +158,50 @@ def _model_line(payload: dict) -> str:
     return f"`{answer}`"
 
 
+def _format_category_diff_table(
+    before_stats: dict[str, dict], after_stats: dict[str, dict]
+) -> list[str]:
+    tags = sorted(set(before_stats) | set(after_stats))
+    if not tags or tags == ["(untagged)"]:
+        return []
+    rows = [
+        "",
+        "### By category",
+        "",
+        "| tag | before | after | Δ |",
+        "| --- | --- | --- | --- |",
+    ]
+    for tag in tags:
+        before = before_stats.get(tag)
+        after = after_stats.get(tag)
+        before_str = f"{before['pass_rate']:.0%}" if before else "—"
+        after_str = f"{after['pass_rate']:.0%}" if after else "—"
+        if before and after:
+            delta = after["pass_rate"] - before["pass_rate"]
+            delta_str = f"{delta:+.0%}" if delta else "—"
+        else:
+            delta_str = "—"
+        rows.append(f"| `{tag}` | {before_str} | {after_str} | {delta_str} |")
+    return rows
+
+
+def _format_category_table(stats: dict[str, dict]) -> list[str]:
+    if not stats or list(stats.keys()) == ["(untagged)"]:
+        return []
+    rows = ["", "### By category", "", "| tag | passed | pass rate |", "| --- | --- | --- |"]
+    for tag, entry in stats.items():
+        rows.append(f"| `{tag}` | {entry['passed']}/{entry['total']} | {entry['pass_rate']:.0%} |")
+    return rows
+
+
 def format_run_markdown(payload: dict) -> str:
     lines = [
         "## Rubric Eval Results",
         "",
         f"**{payload['passed']}/{payload['total']} passed ({payload['pass_rate']:.0%})** — {_model_line(payload)}",
+    ]
+    lines += _format_category_table(compute_category_stats(payload["results"]))
+    lines += [
         "",
         "<details>",
         "<summary>Per-question results</summary>",
@@ -174,6 +237,12 @@ def format_diff_markdown(diff: dict, before_name: str, after_name: str) -> str:
         f"**Pass rate:** {before['pass_rate']:.0%} → {after['pass_rate']:.0%} ({delta_str})",
         "",
         f"Baseline `{before_name}` ({before['total']} qs) → Current `{after_name}` ({after['total']} qs) · {_model_line(after)}",
+    ]
+    lines += _format_category_diff_table(
+        compute_category_stats(before["results"]),
+        compute_category_stats(after["results"]),
+    )
+    lines += [
         "",
         f"### Regressions ({len(diff['regressions'])})",
     ]
@@ -223,6 +292,17 @@ async def run_eval(markdown_out: Path | None = None) -> Path:
     print(f"RESULTS: {passed_count}/{total} passed ({passed_count / total:.0%})")
     print("=" * 50)
 
+    category_stats = compute_category_stats(results)
+    if category_stats and list(category_stats.keys()) != ["(untagged)"]:
+        print("\nBy category:")
+        width = max(len(tag) for tag in category_stats)
+        for tag, entry in category_stats.items():
+            print(
+                f"  {tag.ljust(width)}  {entry['passed']}/{entry['total']} "
+                f"({entry['pass_rate']:.0%})"
+            )
+
+    print()
     for r in results:
         status = "PASS" if r["passed"] else "FAIL"
         print(f"[{status}] {r['question']}")
@@ -273,6 +353,24 @@ def compare(before_path: Path, after_path: Path, markdown_out: Path | None = Non
     delta = diff["delta"]
     delta_str = f"+{delta:.0%}" if delta > 0 else f"{delta:.0%}"
     print(f"\nPass rate: {before['pass_rate']:.0%} -> {after['pass_rate']:.0%} ({delta_str})")
+
+    before_stats = compute_category_stats(before["results"])
+    after_stats = compute_category_stats(after["results"])
+    tags = sorted(set(before_stats) | set(after_stats))
+    if tags and tags != ["(untagged)"]:
+        print("\nBy category:")
+        width = max(len(t) for t in tags)
+        for tag in tags:
+            b = before_stats.get(tag)
+            a = after_stats.get(tag)
+            b_str = f"{b['pass_rate']:.0%}" if b else "  —"
+            a_str = f"{a['pass_rate']:.0%}" if a else "  —"
+            if b and a:
+                d = a["pass_rate"] - b["pass_rate"]
+                d_str = f"({d:+.0%})" if d else "     "
+            else:
+                d_str = ""
+            print(f"  {tag.ljust(width)}  {b_str} -> {a_str} {d_str}")
 
     print(f"\nREGRESSIONS ({len(diff['regressions'])}):")
     if diff["regressions"]:

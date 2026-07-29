@@ -8,7 +8,7 @@ Once an AI feature ships, teams keep changing it: swapping to a cheaper model, t
 
 ## How it works
 
-1. **A golden dataset** — a fixed set of questions with known-good criteria, the "quiz" every version has to pass.
+1. **A golden dataset** — a fixed set of questions with known-good criteria, the "quiz" every version has to pass. Each question can be tagged (`code`, `hedging`, `reasoning`, etc.) so a regression report tells you *what kind* of quality dropped.
 2. **Ask** — the model answers each question like a normal user would.
 3. **Judge** — a second, *different* model call grades that answer against the criteria (pass/fail + reasoning). This is "LLM-as-judge": necessary because AI answers are open-ended text, not multiple choice. We use Haiku for answers and Sonnet as the judge so the model isn't marking its own homework.
 4. **Report** — pass rate across the whole dataset, with per-question reasoning for every failure.
@@ -84,11 +84,12 @@ A local Streamlit app that reads `results/*.json` — no database, no server, no
 streamlit run dashboard.py    # opens http://localhost:8501
 ```
 
-Four views in the sidebar:
+Five views in the sidebar:
 
 - **Pass rate over time** — line chart across all runs, plus a summary table.
+- **Category trends** — one line per tag, so you can see (for example) `hedging` quality drop while `algorithms` stays flat.
 - **Per-question history** — pick a question, see how it's fared run-by-run (useful for spotting flakes).
-- **Latest run detail** — the most recent run's per-question verdicts and full answers.
+- **Latest run detail** — the most recent run's per-category rollup plus per-question verdicts and full answers.
 - **Run-vs-run diff** — pick any two runs, get the same regressions/improvements/unchanged split as `--compare`.
 
 Click **Reload results** in the sidebar after a new eval run to refresh the cache.
@@ -110,6 +111,5 @@ results/                 # timestamped run outputs (gitignored)
 **Now:** Python, Anthropic API, GitHub Actions.
 
 **Next up (in order of leverage):**
-1. **Dataset tags + per-category rollup** — tag each question by category so a regression report can pinpoint *what kind* of quality dropped, not just the overall pass rate.
-2. **Judge meta-eval** — a small human-labeled slice so we can measure how often the judge is right, not just how often the model passes.
-3. **Persistence** — Postgres (or SQLite) once run history is big enough that JSON files start hurting the dashboard.
+1. **Judge meta-eval** — a small human-labeled slice so we can measure how often the judge is right, not just how often the model passes.
+2. **Persistence** — Postgres (or SQLite) once run history is big enough that JSON files start hurting the dashboard.

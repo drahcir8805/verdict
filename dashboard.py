@@ -11,7 +11,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from eval_harness import RESULTS_DIR, compute_diff
+from eval_harness import RESULTS_DIR, compute_category_stats, compute_diff
 
 
 def _parse_timestamp(name: str) -> datetime:
@@ -124,12 +124,72 @@ def view_latest_run_detail(runs: list[dict]) -> None:
         f"**Pass rate:** {latest['passed']}/{latest['total']} ({latest['pass_rate']:.0%})"
     )
 
+    stats = compute_category_stats(latest["results"])
+    if stats and list(stats.keys()) != ["(untagged)"]:
+        st.subheader("By category")
+        st.dataframe(
+            [
+                {
+                    "tag": tag,
+                    "passed": f"{entry['passed']}/{entry['total']}",
+                    "pass rate": f"{entry['pass_rate']:.0%}",
+                }
+                for tag, entry in stats.items()
+            ],
+            use_container_width=True,
+            hide_index=True,
+        )
+
+    st.subheader("Per-question")
     for r in latest["results"]:
-        title = f"[{_passed_mark(r['passed'])}] {r['question']}"
+        tags = r.get("tags") or []
+        tag_str = f" [{', '.join(tags)}]" if tags else ""
+        title = f"[{_passed_mark(r['passed'])}]{tag_str} {r['question']}"
         with st.expander(title):
             st.markdown(f"**Reason:** {r['reason']}")
             st.markdown("**Answer:**")
             st.code(r["answer"], language="markdown")
+
+
+def view_category_trends(runs: list[dict]) -> None:
+    st.header("Category trends")
+
+    all_tags: set[str] = set()
+    run_stats = []
+    for run in runs:
+        stats = compute_category_stats(run["results"])
+        run_stats.append(stats)
+        all_tags.update(stats.keys())
+    all_tags.discard("(untagged)")
+
+    if not all_tags:
+        st.info("No tagged questions in any run yet. Add `tags` to entries in `dataset.json`.")
+        return
+
+    tags = sorted(all_tags)
+    chart_data = {"timestamp": [_parse_timestamp(r["_filename"]) for r in runs]}
+    for tag in tags:
+        chart_data[tag] = [
+            stats.get(tag, {}).get("pass_rate") if stats.get(tag) else None
+            for stats in run_stats
+        ]
+    st.line_chart(chart_data, x="timestamp", y=tags)
+
+    st.subheader("Latest run — per-category pass rate")
+    latest_stats = run_stats[-1]
+    st.dataframe(
+        [
+            {
+                "tag": tag,
+                "passed": f"{latest_stats[tag]['passed']}/{latest_stats[tag]['total']}",
+                "pass rate": f"{latest_stats[tag]['pass_rate']:.0%}",
+            }
+            for tag in tags
+            if tag in latest_stats
+        ],
+        use_container_width=True,
+        hide_index=True,
+    )
 
 
 def view_run_vs_run_diff(runs: list[dict]) -> None:
@@ -177,6 +237,7 @@ def view_run_vs_run_diff(runs: list[dict]) -> None:
 
 VIEWS = {
     "Pass rate over time": view_pass_rate_over_time,
+    "Category trends": view_category_trends,
     "Per-question history": view_per_question_history,
     "Latest run detail": view_latest_run_detail,
     "Run-vs-run diff": view_run_vs_run_diff,
