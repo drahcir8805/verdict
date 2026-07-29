@@ -18,6 +18,7 @@ python eval_harness.py --markdown-out summary.md   # also write PR-comment markd
 python eval_harness.py --compare A B               # diff two runs (stdout)
 python eval_harness.py --compare A B --markdown-out summary.md  # diff → markdown
 python eval_harness.py --compare                   # diff latest two runs in results/
+python eval_harness.py --meta-eval                 # score judge vs. judge_labels.json
 streamlit run dashboard.py                         # local dashboard over results/*.json
 ```
 
@@ -28,6 +29,7 @@ No test suite yet. Manual verification is done by running the script end-to-end 
 - **`eval_harness.py`** — loads the dataset, runs answer+judge in parallel, saves JSON to `results/`, prints a pass/fail report. Also handles compare-mode and markdown output.
 - **`dataset.json`** — the golden dataset: a list of `{ "question", "criteria", "tags"? }` objects. `tags` is optional (a list of category strings) and drives the per-category rollup in reports + dashboard. This is the only file that changes when adding or modifying eval cases.
 - **`dashboard.py`** — Streamlit app that reads `results/*.json` and renders five views (pass rate over time, category trends, per-question history, latest run detail, run-vs-run diff). Reuses `compute_diff()` and `compute_category_stats()` from `eval_harness.py`.
+- **`judge_labels.json`** — human ground truth for the judge. Each entry is `{ question, answer, judge_passed, judge_reason, human_passed, notes }`. Consumed by `--meta-eval` to compute judge agreement rate and surface false positives / negatives. Ships with a small seed set; grow it manually as real runs accumulate disagreements worth labeling.
 - **`.github/workflows/eval.yml`** — runs the eval on PRs and pushes to main. On PR, downloads the most recent `eval-baseline` artifact from main and posts a sticky diff comment. On push to main, uploads the fresh run as the new `eval-baseline`.
 
 ### Core loop (in `run_eval`)
@@ -45,6 +47,10 @@ No test suite yet. Manual verification is done by running the script end-to-end 
 
 `compute_diff(before, after)` is a pure function returning `{regressions, improvements, unchanged, delta}`. Two formatters consume it: `format_diff_markdown()` for PR comments, and inline prints inside `compare()` for CLI use.
 
+### Judge meta-eval pattern
+
+`compute_judge_accuracy(labels)` reads `judge_labels.json` and returns `{total, agreements, agreement_rate, false_positives, false_negatives, disagreements}`. `format_meta_eval_report()` prints a summary. This is how we detect that a pass-rate drop is *actually* a regression versus a stricter judge (or vice versa).
+
 ## Planned next steps
 
-Postgres + pgvector for run history, then a small dashboard. Both premature until dataset size or query patterns actually demand them.
+Persistence (SQLite → Postgres) once `results/*.json` starts hurting the dashboard's load time. Growing `judge_labels.json` from its seed set to ~30-50 real triples is a manual chore that needs to happen alongside actual eval runs.

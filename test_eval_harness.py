@@ -125,6 +125,65 @@ class CategoryStatsTests(unittest.TestCase):
         self.assertEqual(stats["code"]["passed"], 0)
 
 
+class JudgeMetaEvalTests(unittest.TestCase):
+    def test_perfect_agreement(self):
+        labels = [
+            {"question": "q1", "answer": "a1", "judge_passed": True, "human_passed": True},
+            {"question": "q2", "answer": "a2", "judge_passed": False, "human_passed": False},
+        ]
+        stats = eh.compute_judge_accuracy(labels)
+        self.assertEqual(stats["agreements"], 2)
+        self.assertEqual(stats["agreement_rate"], 1.0)
+        self.assertEqual(stats["false_positives"], [])
+        self.assertEqual(stats["false_negatives"], [])
+
+    def test_classifies_false_positives_and_negatives(self):
+        labels = [
+            # false positive: judge PASS, human FAIL
+            {"question": "fp", "answer": "a", "judge_passed": True, "human_passed": False},
+            # false negative: judge FAIL, human PASS
+            {"question": "fn", "answer": "a", "judge_passed": False, "human_passed": True},
+            # agreement
+            {"question": "ok", "answer": "a", "judge_passed": True, "human_passed": True},
+        ]
+        stats = eh.compute_judge_accuracy(labels)
+        self.assertEqual(len(stats["false_positives"]), 1)
+        self.assertEqual(stats["false_positives"][0]["question"], "fp")
+        self.assertEqual(len(stats["false_negatives"]), 1)
+        self.assertEqual(stats["false_negatives"][0]["question"], "fn")
+        self.assertEqual(stats["agreements"], 1)
+        self.assertAlmostEqual(stats["agreement_rate"], 1 / 3)
+
+    def test_handles_empty_labels(self):
+        stats = eh.compute_judge_accuracy([])
+        self.assertEqual(stats["total"], 0)
+        self.assertEqual(stats["agreement_rate"], 0.0)
+        report = eh.format_meta_eval_report(stats)
+        self.assertIn("No labels yet", report)
+
+    def test_report_names_disagreeing_questions(self):
+        labels = [
+            {"question": "leaky-hedge",
+             "answer": "a", "judge_passed": True, "human_passed": False,
+             "judge_reason": "PASS - looked qualified", "notes": "missing required criterion"},
+        ]
+        report = eh.format_meta_eval_report(eh.compute_judge_accuracy(labels))
+        self.assertIn("leaky-hedge", report)
+        self.assertIn("FP", report)
+
+    def test_shipped_judge_labels_schema(self):
+        """judge_labels.json entries must have the required keys and correct types."""
+        labels = eh.load_judge_labels(eh.JUDGE_LABELS_PATH)
+        self.assertGreaterEqual(len(labels), 1)
+        for l in labels:
+            for key in ("question", "answer", "judge_passed", "human_passed"):
+                self.assertIn(key, l)
+            self.assertIsInstance(l["question"], str)
+            self.assertIsInstance(l["answer"], str)
+            self.assertIsInstance(l["judge_passed"], bool)
+            self.assertIsInstance(l["human_passed"], bool)
+
+
 class MarkdownFormatterTests(unittest.TestCase):
     def test_run_markdown_contains_headline_stats(self):
         payload = _make_run(

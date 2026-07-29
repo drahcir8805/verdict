@@ -39,6 +39,7 @@ JUDGE_MODEL = "claude-sonnet-4-6"
 
 DATASET_PATH = Path(__file__).parent / "dataset.json"
 RESULTS_DIR = Path(__file__).parent / "results"
+JUDGE_LABELS_PATH = Path(__file__).parent / "judge_labels.json"
 
 
 def load_dataset(path: Path) -> list[dict]:
@@ -103,6 +104,74 @@ def save_results(results: list[dict], passed_count: int) -> Path:
     with open(path, "w") as f:
         json.dump(payload, f, indent=2)
     return path
+
+
+def load_judge_labels(path: Path) -> list[dict]:
+    with open(path) as f:
+        return json.load(f)
+
+
+def compute_judge_accuracy(labels: list[dict]) -> dict:
+    """Compare judge verdicts against human ground truth.
+
+    Returns:
+        total: number of labeled entries
+        agreements: entries where judge_passed == human_passed
+        agreement_rate: agreements / total
+        false_positives: judge said PASS, human said FAIL (judge too lenient)
+        false_negatives: judge said FAIL, human said PASS (judge too strict)
+        disagreements: list of the entries where the two verdicts differ
+    """
+    total = len(labels)
+    false_positives = [
+        l for l in labels if l["judge_passed"] and not l["human_passed"]
+    ]
+    false_negatives = [
+        l for l in labels if not l["judge_passed"] and l["human_passed"]
+    ]
+    agreements = total - len(false_positives) - len(false_negatives)
+    return {
+        "total": total,
+        "agreements": agreements,
+        "agreement_rate": agreements / total if total else 0.0,
+        "false_positives": false_positives,
+        "false_negatives": false_negatives,
+        "disagreements": false_positives + false_negatives,
+    }
+
+
+def format_meta_eval_report(stats: dict) -> str:
+    lines = [
+        "=" * 50,
+        "JUDGE META-EVAL",
+        "=" * 50,
+        f"Labeled entries: {stats['total']}",
+    ]
+    if stats["total"] == 0:
+        lines.append(
+            "No labels yet. Add entries to judge_labels.json to compute accuracy."
+        )
+        return "\n".join(lines)
+    lines += [
+        f"Agreements:      {stats['agreements']}/{stats['total']} "
+        f"({stats['agreement_rate']:.0%})",
+        f"False positives: {len(stats['false_positives'])} "
+        f"(judge said PASS, human said FAIL — judge too lenient)",
+        f"False negatives: {len(stats['false_negatives'])} "
+        f"(judge said FAIL, human said PASS — judge too strict)",
+    ]
+    if stats["disagreements"]:
+        lines.append("")
+        lines.append("Disagreements:")
+        for l in stats["disagreements"]:
+            direction = (
+                "FP" if l["judge_passed"] and not l["human_passed"] else "FN"
+            )
+            lines.append(f"  [{direction}] {l['question']}")
+            lines.append(f"        judge: {l.get('judge_reason', '?')}")
+            if l.get("notes"):
+                lines.append(f"        human: {l['notes']}")
+    return "\n".join(lines)
 
 
 def compute_category_stats(results: list[dict]) -> dict[str, dict]:
@@ -400,6 +469,15 @@ def compare(before_path: Path, after_path: Path, markdown_out: Path | None = Non
         print(f"\nMarkdown summary written to {markdown_out}")
 
 
+def run_meta_eval(path: Path) -> None:
+    if not path.exists():
+        print(f"No judge labels at {path}. See README for the schema.")
+        sys.exit(1)
+    labels = load_judge_labels(path)
+    stats = compute_judge_accuracy(labels)
+    print(format_meta_eval_report(stats))
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="LLM eval harness")
     parser.add_argument(
@@ -409,6 +487,13 @@ if __name__ == "__main__":
         help="Compare two runs. Pass two file paths, or omit to compare the latest two.",
     )
     parser.add_argument(
+        "--meta-eval",
+        nargs="?",
+        const=str(JUDGE_LABELS_PATH),
+        metavar="LABELS_FILE",
+        help="Score the judge against human labels. Defaults to judge_labels.json.",
+    )
+    parser.add_argument(
         "--markdown-out",
         metavar="PATH",
         type=Path,
@@ -416,7 +501,9 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    if args.compare is not None:
+    if args.meta_eval is not None:
+        run_meta_eval(Path(args.meta_eval))
+    elif args.compare is not None:
         if len(args.compare) == 2:
             compare(Path(args.compare[0]), Path(args.compare[1]), args.markdown_out)
         elif len(args.compare) == 0:

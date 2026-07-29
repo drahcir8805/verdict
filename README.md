@@ -35,6 +35,7 @@ python eval_harness.py --markdown-out summary.md      # also write a PR-comment-
 python eval_harness.py --compare A.json B.json        # diff two runs (regressions / improvements)
 python eval_harness.py --compare                      # diff the latest two runs in results/
 python eval_harness.py --compare A B --markdown-out summary.md   # diff -> markdown
+python eval_harness.py --meta-eval                    # score the judge against judge_labels.json
 streamlit run dashboard.py                            # local dashboard over results/*.json
 ```
 
@@ -94,12 +95,40 @@ Five views in the sidebar:
 
 Click **Reload results** in the sidebar after a new eval run to refresh the cache.
 
+## Judge meta-eval
+
+The judge is an LLM too — sometimes lenient, sometimes strict, sometimes making up requirements that aren't in the criteria. `judge_labels.json` is a small human-labeled ground-truth file used to measure how often the judge is actually right.
+
+Schema per entry:
+
+```json
+{
+  "question": "…the original question…",
+  "answer": "…the answer the model gave…",
+  "judge_passed": true,
+  "judge_reason": "PASS - correct year",
+  "human_passed": true,
+  "notes": "why you agree / disagree with the judge"
+}
+```
+
+Run it:
+
+```bash
+python eval_harness.py --meta-eval
+```
+
+You get an agreement rate plus a breakdown of **false positives** (judge said PASS but the answer really was bad) and **false negatives** (judge FAILed a good answer). To grow the labeled set, hand-label real triples from `results/*.json` after each eval and append them to `judge_labels.json` — the more entries, the more trustworthy the judge accuracy number.
+
+The bundled file ships with 5 seed entries to demo the tooling; replace them with real labels as your dataset grows.
+
 ## Repo layout
 
 ```
-eval_harness.py          # ask, judge, compare, markdown output — all logic
+eval_harness.py          # ask, judge, compare, meta-eval, markdown output — all logic
 dashboard.py             # local Streamlit dashboard over results/*.json
-dataset.json             # the golden questions + criteria (edit this to add cases)
+dataset.json             # the golden questions + criteria + optional tags
+judge_labels.json        # human ground truth for judge meta-eval
 requirements.txt         # anthropic, python-dotenv, streamlit
 .env.example             # template — copy to .env locally
 .github/workflows/eval.yml   # runs on PR + push to main
@@ -111,5 +140,5 @@ results/                 # timestamped run outputs (gitignored)
 **Now:** Python, Anthropic API, GitHub Actions.
 
 **Next up (in order of leverage):**
-1. **Judge meta-eval** — a small human-labeled slice so we can measure how often the judge is right, not just how often the model passes.
-2. **Persistence** — Postgres (or SQLite) once run history is big enough that JSON files start hurting the dashboard.
+1. **Persistence** — SQLite (then Postgres) once run history is big enough that JSON files start hurting the dashboard.
+2. **Grow `judge_labels.json`** — the tooling is in; the ground-truth set needs to grow from 5 seeds to ~30-50 real triples before the accuracy number is meaningful.
