@@ -140,5 +140,8 @@ results/                 # timestamped run outputs (gitignored)
 **Now:** Python, Anthropic API, GitHub Actions.
 
 **Next up (in order of leverage):**
-1. **Persistence** — SQLite (then Postgres) once run history is big enough that JSON files start hurting the dashboard.
-2. **Grow `judge_labels.json`** — the tooling is in; the ground-truth set needs to grow from 5 seeds to ~30-50 real triples before the accuracy number is meaningful.
+1. **Restore CI + delete demo data** — flip `.github/workflows/eval.yml` back to `pull_request` / `push: [main]` when API credits are restored, delete the synthetic `results/*.json` seed files, and open a throwaway PR to confirm the full loop (cross-model judge → per-category rollup → sticky PR comment) still works end-to-end. Everything below is theoretical until this happens.
+2. **Cost + latency per question** — record `input_tokens`, `output_tokens`, and `duration_ms` on each result, roll them up per run, add a cost-trend line to the dashboard. Small change, unlocks cost-regression detection alongside quality-regression detection.
+3. **Grow `judge_labels.json`** — the tooling is in; the ground-truth set needs to grow from 5 seeds to ~30-50 real triples before the meta-eval agreement number is statistically meaningful. Slow-burn manual chore; hand-label real disagreements as they come out of live runs.
+4. **Persistence: SQLite** — replace `results/*.json` with a single `results.db`. Not urgent until run count is ~50+ and the dashboard's file scan starts to hurt. Postgres later if / when a hosted dashboard is worth it.
+5. **Judge prompt v2** — add few-shot examples or chain-of-thought to the judge prompt to lift agreement rate. Premature without more labels (#3) to measure the effect against.
